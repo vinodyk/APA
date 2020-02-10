@@ -163,7 +163,7 @@ simple_gain <- function(test_case, treatment, control, target, data, test_type, 
 #Frac
 #Similar to "Simple" but makes sure the difference in outcome after the split is bigger than before. Also takes into
 #account the number of samples in each node after the split.
-frac_gain <- function(test_case, treatment, control, target, data, test_type, test_col){
+old_frac_gain <- function(test_case, treatment, control, target, data, test_type, test_col){
   treatments <- c(treatment, control)
   gain <- 0
   #First check if there is data in each subset after the data is split. If not return -1.
@@ -205,9 +205,92 @@ frac_gain <- function(test_case, treatment, control, target, data, test_type, te
   return(gain)
 }
 
+frac_gain <- function(test_case, treatment, control, target, data, test_type, test_col){
+  treatments <- c(treatment, control)
+  gain <- 0
+  #First check if there is data in each subset after the data is split. If not return -1.
+  if(test_type == 'categorical'){
+    data1 <- data[data[,test_col] == test_case,]
+    data2 <- data[data[,test_col] != test_case,]
+  } else{
+    data1 <- data[data[,test_col] < test_case,]
+    data2 <- data[data[,test_col] >= test_case,]
+  }
+  if((nrow(data) == 0) || nrow(data1) == 0 || nrow(data2) == 0 ){
+    return(-1)
+  }
+  frac1 <- nrow(data1)/nrow(data)
+  frac2 <- nrow(data2)/nrow(data)
+  
+  current_gain <- 0
+  for(x in 1:(length(treatments)-1)){
+    t <- treatments[x]
+    s <- treatments[x+1]
+    temp_gain <- abs(mean(data[data[,t] == 1,target])-mean(data[data[,s] == 1,target]))
+    current_gain <- current_gain + temp_gain
+  }
+  #The actual calculation of the gain
+  #Here for a test of a categorical cavariate
+  for(x in 1:(length(treatments)-1)){
+    t <- treatments[x]
+    s <- treatments[x+1]
+    temp_gain <- frac1*abs(mean(data1[data1[,t] == 1,target])-mean(data1[data1[,s] == 1,target])) +
+      frac2*abs(mean(data2[data2[,t] == 1,target])-mean(data2[data2[,s] == 1,target]))
+    gain <- gain + temp_gain
+  }
+  if(is.na(gain)){
+    gain = -1
+  }
+  if(gain <= current_gain){
+    gain = -1
+  }
+  return(gain)
+}
+
+max_gain <- function(test_case, treatment, control, target, data, test_type, test_col){
+  treatments <- c(treatment, control)
+  gain <- 0
+  #First check if there is data in each subset after the data is split. If not return -1.
+  if(test_type == 'categorical'){
+    data1 <- data[data[,test_col] == test_case,]
+    data2 <- data[data[,test_col] != test_case,]
+  } else{
+    data1 <- data[data[,test_col] < test_case,]
+    data2 <- data[data[,test_col] >= test_case,]
+  }
+  if((nrow(data) == 0) || nrow(data1) == 0 || nrow(data2) == 0 ){
+    return(-1)
+  }
+  frac1 <- nrow(data1)/nrow(data)
+  frac2 <- nrow(data2)/nrow(data)
+  
+  current_results <- c()
+  left_results <- c()
+  right_results <- c()
+  for(t in treatments){
+    current_results <- c(current_results, mean(data[data[,t] == 1,target]))
+    left_results <- c(left_results, mean(data1[data1[,t] == 1,target]))
+    right_results <- c(right_results, mean(data2[data2[,t] == 1,target]))
+  }
+  current_gain <- (max(current_results) - sort(current_results,decreasing = T)[2])^2
+  right_gain <- (max(right_results) - sort(right_results,decreasing = T)[2])^2
+  left_gain <- (max(left_results) - sort(left_results,decreasing = T)[2])^2
+  gain <- frac1*left_gain + frac2*right_gain - current_gain
+  if(is.na(gain)){
+    return(-1)
+  } else if(gain < 0){
+    return(-1)
+  } else{
+    return(gain)
+  }
+}
+
+
+
+
 #Max
 #Simply tries to maximize the maximum expected outcome for all treatments and control.
-max_gain <- function(test_case, treatment, control, target, data, test_type, test_col){
+old_max_gain <- function(test_case, treatment, control, target, data, test_type, test_col){
   treatments <- c(treatment, control)
   gain <- 0
   #First check if there is data in each subset after the data is split. If not return -1.
