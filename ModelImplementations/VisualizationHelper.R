@@ -23,79 +23,48 @@ visualize <- function(temp_data,multiple_predictions = TRUE,n_treated = NULL,err
     temp_df[,c] <- as.numeric(as.character(temp_df[,c]))
   }
   temp_df[,3] <- as.character(temp_df[,3])
-  if(is.null(n_treated)){
-    if(multiple_predictions){
-      tgc <- summarySE(data=temp_df, measurevar="values", groupvars=c("percentile","model"))
-      # new_tgc <- tgc[order(tgc$model),]
-      # rownames(new_tgc) <- 1:nrow(new_tgc)
-      pd <- position_dodge(1) # move them .05 to the left and right
-      if(errorbars){
-        print(ggplot(tgc, aes(x=percentile, y=mean,color=model)) + 
-                geom_errorbar(aes(ymin=mean-ci, ymax=mean+ci), position = pd) +
-                geom_line() +
-                geom_point() +
-                xlab("Percent assigned according to Model Prediction") +
-                ylab("Expected Outcome per Person") +
-                ggtitle("Mean and Confidence Interval for Expected Outcome"))
-      } else{
-        print(ggplot(tgc, aes(x=percentile, y=mean,color=model)) + 
-                geom_line() +
-                geom_point() +
-                xlab("Percent assigned according to Model Prediction") +
-                ylab("Expected Outcome per Person") +
-                ggtitle("Mean and Confidence Interval for Expected Outcome"))
-      }
-     
+  if(multiple_predictions){
+    tgc <- summarySE(temp_df, measurevar="values", groupvars=c("percentile","model"))
+    pd <- position_dodge(1) # move them .05 to the left and right
+    if(errorbars){
+      p1 <- ggplot(tgc, aes(x=percentile, y=values,color=model)) + 
+        geom_errorbar(aes(ymin=values-ci, ymax=values+ci), position = pd) +
+        geom_line() +
+        geom_point() +
+        xlab("Percent assigned according to Model Prediction") +
+        ylab("Expected Outcome per Person") +
+        ggtitle("Mean and Confidence Interval for Expected Outcome")
     } else{
-      print(ggplot(temp_df, aes(x=percentile, y=values,color=model)) + 
-              geom_line() +
-              geom_point() +
-              xlab("Percent assigned according to Model Prediction") +
-              ylab("Expected Outcome per Person") +
-              ggtitle("Mean and Confidence Interval for Expected Outcome"))
+      p1 <- ggplot(tgc, aes(x=percentile, y=values,color=model)) + 
+        geom_line() +
+        geom_point() +
+        xlab("Percent assigned according to Model Prediction") +
+        ylab("Expected Outcome per Person") +
+        ggtitle("Mean and Confidence Interval for Expected Outcome") 
+    }
+    if(!is.null(n_treated)){
+      agg_df<- aggregate(n_treated$PercTreated, by=list(n_treated$Treatment,n_treated$Model,n_treated$Decile), 
+                         FUN=mean)
+      colnames(agg_df) <- c("Treatment","Model","Decile","PercTreated")
+      p2 <- ggplot(agg_df, aes(fill=Treatment, y=PercTreated, x=Decile)) + 
+        geom_bar(position="stack", stat="identity") +
+        facet_wrap(~Model) 
     }
   } else{
-    if(multiple_predictions){
-      tgc <- summarySE(temp_df, measurevar="values", groupvars=c("percentile","model"))
-      pd <- position_dodge(1) # move them .05 to the left and right
-      if(errorbars){
-        p1 <- ggplot(tgc, aes(x=percentile, y=mean,color=model)) + 
-          geom_errorbar(aes(ymin=mean-ci, ymax=mean+ci), position = pd) +
-          geom_line() +
-          geom_point() +
-          xlab("Percent assigned according to Model Prediction") +
-          ylab("Expected Outcome per Person") +
-          ggtitle("Mean and Confidence Interval for Expected Outcome")
-      } else{
-        p1 <- ggplot(tgc, aes(x=percentile, y=mean,color=model)) + 
-          geom_line() +
-          geom_point() +
-          xlab("Percent assigned according to Model Prediction") +
-          ylab("Expected Outcome per Person") +
-          ggtitle("Mean and Confidence Interval for Expected Outcome") 
-      }
-      
-      agg_df<- aggregate(n_treated$PercTreated, by=list(n_treated$Treatment,n_treated$Model), FUN=mean)
-      # ordered_values <- c()
-      # for(m in  unique(n_treated$Model)){
-      #   ordered_values <- rbind(ordered_values, agg_df[agg_df$Group.2 == m,])
-      # }
-      colnames(agg_df) <- c("Treatment","Model","PercTreated")
-      p2 <- ggplot(agg_df, aes(fill=Treatment, y=PercTreated, x=Model)) + 
+    p1 <- ggplot(temp_df, aes(x=percentile, y=values,color=model)) + 
+      geom_line() +
+      geom_point() +
+      xlab("Percent assigned according to Model Prediction") +
+      ylab("Expected Outcome per Person") +
+      ggtitle("Mean and Confidence Interval for Expected Outcome")
+    if(!is.null(n_treated)){
+      p2 <- ggplot(n_treated, aes(fill=Treatment, y=PercTreated, x=Decile)) + 
         geom_bar(position="stack", stat="identity") +
-        coord_flip()
-    } else{
-      p1 <- ggplot(temp_df, aes(x=percentile, y=values,color=model)) + 
-              geom_line() +
-              geom_point() +
-              xlab("Percent assigned according to Model Prediction") +
-              ylab("Expected Outcome per Person") +
-              ggtitle("Mean and Confidence Interval for Expected Outcome")
-      p2 <- ggplot(n_treated, aes(fill=Treatment, y=PercTreated, x=Model)) + 
-        geom_bar(position="stack", stat="identity") +
-        coord_flip()
+        facet_wrap(~Model)
     }
-    print(p1)
+  }
+  print(p1)
+  if(!is.null(n_treated)){
     print(p2)
   }
 }

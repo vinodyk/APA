@@ -63,10 +63,29 @@ perc_matched <- function(predictions){
   return(deciles)
 }
 
-perc_treated <- function(pred, treatment_list){
+decile_perc_treated <- function(pred, treatment_list){
+  pred$max_uplift <- apply(pred[ , grep("^uplift",colnames(pred))], 1 , max)
+  sorted_predictions <- pred[order(-pred$max_uplift),]
+  perc <- c()
+  n_tenth <- round(nrow(pred)/10)
+  for(x in 1:9){
+    perc <- rbind(perc, cbind(perc_treated(sorted_predictions[1:(x*n_tenth),], treatment_list, nrow(pred)),
+                              treatment_list, rep(x,length(treatment_list))))
+  }
+  perc <- rbind(perc,cbind(perc_treated(sorted_predictions, treatment_list),treatment_list,
+                           rep(10,length(treatment_list))))
+  return(perc)
+}
+
+perc_treated <- function(pred, treatment_list, n_pred = NULL){
   perc <- c()
   for(t in treatment_list){
-    perc <- c(perc, sum(pred$Treatment == t)/nrow(pred))
+    if(is.null(n_pred)){
+      perc <- c(perc, sum(pred$Treatment == t)/nrow(pred))
+    } else{
+      perc <- c(perc, sum(pred$Treatment == t)/n_pred)
+    }
+    
   }
   return(perc)
 }
