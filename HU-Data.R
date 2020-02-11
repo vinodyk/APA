@@ -19,7 +19,7 @@ source('ModelImplementations/VisualizationHelper.R')
 source("ModelImplementations/PredictionFunctions.R")
 
 
-n_predictions <- 15
+n_predictions <- 20
 set.seed(1234)
 #Preprocessing---- 
 if(!file.exists("Data/hu-data.csv")){
