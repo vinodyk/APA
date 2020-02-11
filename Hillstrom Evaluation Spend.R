@@ -116,11 +116,16 @@ for(model in c("tree","random_forest","cts","sma rf","causal_forest")){
         if(length(outcomes) == 0){
           outcomes <- c(new_expected_quantile_response(response,control,treatment_list,pred),
                         paste(model,"_",c,sep = ""))
+          decile_treated <- cbind(decile_perc_treated(pred,treatment_list),
+                                  rep(paste(model,"_",c,sep = ""),11*length(treatment_list)))
           p_treated <- cbind(perc_treated(pred,treatment_list),treatment_list,rep(paste(model,"_",c,sep = ""),
                                                                    length(treatment_list)))
         } else{
           outcomes <- rbind(outcomes,c(new_expected_quantile_response(response,control,treatment_list,pred),
                                        paste(model,"_",c,sep = "")))
+          decile_treated <- rbind(decile_treated,
+                                  cbind(decile_perc_treated(pred,treatment_list),
+                                        rep(paste(model,"_",c,sep = ""),11*length(treatment_list),11)))
           p_treated <- rbind(p_treated,cbind(perc_treated(pred,treatment_list),treatment_list,
                                               rep(paste(model,"_",c,sep = ""),length(treatment_list))))
         }
@@ -130,6 +135,9 @@ for(model in c("tree","random_forest","cts","sma rf","causal_forest")){
     for(f in 1:n_predictions){
       pred <- read.csv(paste(folder,model,as.character(f),".csv",sep = ""))
       outcomes <- rbind(outcomes,c(new_expected_quantile_response(response,control,treatment_list,pred),model))
+      decile_treated <- rbind(decile_treated,
+                              cbind(decile_perc_treated(pred,treatment_list),
+                                    rep(model,11*length(treatment_list))))
       p_treated <- rbind(p_treated, cbind(perc_treated(pred,treatment_list),treatment_list,
                                           rep(model, length(treatment_list))))
     }
@@ -137,32 +145,37 @@ for(model in c("tree","random_forest","cts","sma rf","causal_forest")){
 }
 outcome_df <- data.frame(outcomes)
 perc_treated_df <- data.frame(p_treated)
+decile_treated_df <- data.frame(decile_treated)
 colnames(outcome_df) <- c(0,10,20,30,40,50,60,70,80,90,100,"Model")
 colnames(perc_treated_df) <- c("PercTreated","Treatment","Model")
+colnames(decile_treated_df) <- c("PercTreated","Treatment","Decile","Model")
 rownames(outcome_df) <- 1:nrow(outcome_df)
 rownames(perc_treated_df) <- 1:nrow(perc_treated_df)
+rownames(decile_treated_df) <- 1:nrow(decile_treated_df)
 for(c in 1:11){
   outcome_df[,c] <- as.numeric(as.character(outcome_df[,c]))
 }
 outcome_df[,12] <- as.character(outcome_df[,12])
 perc_treated_df[,1] <- as.numeric(as.character(perc_treated_df[,1]))
 perc_treated_df[,2] <- as.character(perc_treated_df[,2])
+decile_treated_df[,1] <- as.numeric(as.character(decile_treated_df[,1]))
+decile_treated_df[,3] <- as.numeric(as.character(decile_treated_df[,3]))
 print(difftime(Sys.time(),start_time,units = "mins"))
 
 
-#Visualize the results
+#Visualize the results.
 if(n_predictions > 1){
   for(model in unique(outcome_df$Model)){
     temp_data <- outcome_df[outcome_df$Model == model,]
-    n_treated <- perc_treated_df[perc_treated_df$Model == model,]
+    n_treated <- decile_treated_df[decile_treated_df$Model == model,]
     visualize(temp_data = temp_data, multiple_predictions = TRUE, n_treated = n_treated)
   }
-  visualize(temp_data = outcome_df, multiple_predictions = TRUE, n_treated = perc_treated_df)
+  visualize(temp_data = outcome_df, multiple_predictions = TRUE, n_treated = decile_treated_df)
 } else{
   for(model in unique(outcome_df$Model)){
     temp_data <- outcome_df[outcome_df$Model == model,]
-    n_treated <- perc_treated_df[perc_treated_df$Model == model,]
+    n_treated <- decile_treated_df[decile_treated_df$Model == model,]
     visualize(temp_data = temp_data, multiple_predictions = FALSE, n_treated = n_treated)
   }
-  visualize(temp_data = outcome_df, multiple_predictions = FALSE, n_treated = perc_treated_df)
+  visualize(temp_data = outcome_df, multiple_predictions = FALSE, n_treated = decile_treated_df)
 }
