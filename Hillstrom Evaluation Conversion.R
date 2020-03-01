@@ -17,15 +17,16 @@ source('ModelImplementations/DecisionTreeImplementation.R')
 source('ModelImplementations/RzepakowskiTree.R')
 source('Evaluation Methods.R')
 source('ModelImplementations/CausalTree.R')
-#source('ModelImplementations/Causal Forest.R')
+#('ModelImplementations/Causal Forest.R')
 source('ModelImplementations/Separate Model Approach.R')
 source('ModelImplementations/ContextualTreatmentSelection.R')
 source('ModelImplementations/VisualizationHelper.R')
 source("ModelImplementations/PredictionFunctions.R")
+source("ModelImplementations/RzepakowskiTree.R")
 
 
 set.seed(1234)
-n_predictions <- 20
+n_predictions <- 10
 #Data import and preprocessing
 email <- read.csv('Data/Email.csv')
 
@@ -36,14 +37,14 @@ email$mens <- as.factor(email$mens)
 email$womens <- as.factor(email$womens)
 email$newbie <- as.factor(email$newbie)
 
-email$visit <- email$conversion <- email$segment <- NULL
+email$spend <- email$visit <- email$segment <- NULL
 
-response <- 'spend'
+response <- 'conversion'
 control <- "control"
 treatment_list <- c('men_treatment','women_treatment')
 
 original_email <- email
-
+folder <- "Predictions/Conversion/"
 # The training and prediction part
 for(f in 1:n_predictions){
   
@@ -66,37 +67,42 @@ for(f in 1:n_predictions){
   
   
   start_time <- Sys.time()
-  for(c in c("frac")){
+  for(c in c("frac","max")){
     print(c)
-    # Single Tree
-    # raw_tree <- build_tree(train_val,0,100,treatment_list,response,control,test_list,criterion = c)
-    # pruned_tree <- simple_prune_tree(raw_tree,val,treatment_list,test_list,response,control,criterion = c)
-    # pred <- predict.dt.as.df(pruned_tree, test)
-    # write.csv(pred, paste("Predictions/Hillstrom/tree_",c,as.character(f),".csv",sep = ""), row.names = FALSE)
-
     #Random Forest
     forest <- parallel_build_random_forest(train,treatment_list,response,control,n_trees = 300,n_features = 3,
-                                           criterion = c, remain_cores = 12)
-    pred <- predict_forest_df(forest,test,remain_cores = 12)
-    write.csv(pred, paste("Predictions/NewHillstrom/random_forest_",c,as.character(f),".csv",sep = ""), row.names = FALSE)
+                                           criterion = c, remain_cores = 14)
+    pred <- predict_forest_df(forest,test,remain_cores = 14)
+    write.csv(pred, paste(folder,"random_forest_",c,as.character(f),".csv",sep = ""), row.names = FALSE)
   }
 
-  # Causal Forest
-  # causal_forest_pred <- causalForestPredicitons(train, test, treatment_list, response, control,ntree = 1000,
-  #                                               s_rule = "TOT", s_true = T)
-  # write.csv(causal_forest_pred, paste("Predictions/NewHillstrom/causal_forest2",as.character(f),".csv",sep = ""),
-  #           row.names = FALSE)
-  # 
+  #Causal Forest
+  causal_forest_pred <- causalForestPredicitons(train, test, treatment_list, response, control,ntree = 1000,
+                                                s_rule = "TOT", s_true = T)
+  write.csv(causal_forest_pred, paste(folder,"causal_forest2",as.character(f),".csv",sep = ""),
+            row.names = FALSE)
+
   # # Separate Model Approach
-  # pred_sma_rf <- dt_models(train, response, "anova",treatment_list,control,test,"rf")
-  # write.csv(pred_sma_rf, paste("Predictions/NewHillstrom/sma rf",as.character(f),".csv",sep = ""),
-  #           row.names = FALSE)
-  # 
+  pred_sma_rf <- dt_models(train, response, "class",treatment_list,control,test,"rf")
+  write.csv(pred_sma_rf, paste(folder,"sma rf",as.character(f),".csv",sep = ""),
+            row.names = FALSE)
+  #
   # # CTS
-  # cts_forest <- build_cts(response, control, treatment_list, train, 300, nrow(train), 5, 2, 100, parallel = TRUE,
-  #                         remain_cores = 12)
-  # pred <- predict_forest_df(cts_forest, test,remain_cores = 12)
-  # write.csv(pred, paste("Predictions/NewHillstrom/cts",as.character(f),".csv",sep = ""), row.names = FALSE)
+  cts_forest <- build_cts(response, control, treatment_list, train, 200, nrow(train), 5, 2, 100, parallel = TRUE,
+                          remain_cores = 18)
+  pred <- predict_forest_df(cts_forest, test,remain_cores = 18)
+  write.csv(pred, paste(folder,"cts",as.character(f),".csv",sep = ""), row.names = FALSE)
+
+  #Rzp
+  for(div in c("EucDistance","binary_KL_divergence")){
+    rzp_forest <- parallel_build_random_rzp_forest(train_data = train, val_data = val, treatment_list = treatment_list,
+                                                   response = response,control = control, n_trees = 200, n_features = 3,
+                                                   normalize = F, max_depth = 100,test_list = test_list, remain_cores = 12,
+                                                   divergence = div)
+    pred <- predict_forest_df(rzp_forest, test,remain_cores = 12)
+    write.csv(pred, paste(folder,"rzp",div,as.character(f),".csv",sep = ""), row.names = FALSE)
+  }
+
   end_time <- Sys.time()
   print(difftime(end_time,start_time,units = "mins"))
 }
@@ -105,14 +111,12 @@ for(f in 1:n_predictions){
 # Here the predictions are evaluated. Additionally we look at the treatment distribution, to see which treatments
 # are assigned how often by the models.
 start_time <- Sys.time()
-folder <- "Predictions/NewHillstrom/"
 outcomes <- c()
 decile_treated <- c()
 result_qini <- c()
-n_predictions <- 20
-for(model in c("random_forest","cts","sma rf","causal_forest2")){
+for(model in c("random_forest2","random_forest","cts","sma rf","causal_forest2","rzp")){
   if(sum(model == c("tree","random_forest","random_forest2")) > 0){
-    for(c in c("frac","max","simple")){
+    for(c in c("max")){
       for(f in 1:n_predictions){
         pred <- read.csv(paste(folder,model,"_",c,as.character(f),".csv",sep = ""))
         if(length(outcomes) == 0){
@@ -127,22 +131,35 @@ for(model in c("random_forest","cts","sma rf","causal_forest2")){
                                        paste(model,"_",c,sep = "")))
           decile_treated <- rbind(decile_treated,
                                   cbind(decile_perc_treated(pred,treatment_list),
-                                        rep(paste(model,"_",c,sep = ""),11*length(treatment_list))))
+                                        rep(paste(model,"_",c,sep = ""),11*length(treatment_list),11)))
           result_qini <- rbind(result_qini,cbind(qini_curve(pred,control,treatment_list),
                                                  paste(model,"_",c,sep = "")))
         }
       }
     }
-  } else{
-    colnames(result_qini) <- c("Percentile","Values","Treatment","model")
+  } else if(model == "rzp"){
+    for(div in c("EucDistance","binary_KL_divergence")){
+      for(f in 1:n_predictions){
+        pred <- read.csv(paste(folder,model,div,as.character(f),".csv",sep = ""))
+        outcomes <- rbind(outcomes,c(new_expected_quantile_response(response,control,treatment_list,pred),
+                                     paste(model,div,sep = "_")))
+        decile_treated <- rbind(decile_treated,
+                                cbind(decile_perc_treated(pred,treatment_list),
+                                      rep(paste(model,div,sep = "_"),11*length(treatment_list))))
+        result_qini <- rbind(result_qini,setNames(cbind(qini_curve(pred,control,treatment_list),
+                                                        paste(model,div,sep = "_")),names(result_qini)))    
+      }
+    }
+  } 
+  else{
     for(f in 1:n_predictions){
       pred <- read.csv(paste(folder,model,as.character(f),".csv",sep = ""))
       outcomes <- rbind(outcomes,c(new_expected_quantile_response(response,control,treatment_list,pred),model))
       decile_treated <- rbind(decile_treated,
                               cbind(decile_perc_treated(pred,treatment_list),
                                     rep(model,11*length(treatment_list))))
-      result_qini <- rbind(result_qini,cbind(qini_curve(pred,control,treatment_list),
-                                             model))    
+      result_qini <- rbind(result_qini,setNames(cbind(qini_curve(pred,control,treatment_list),
+                                             model),names(result_qini)))    
     }
   }
 }
@@ -167,11 +184,11 @@ colnames(random_df) <- c("percentile","values","treatment","model")
 result_qini <- rbind(result_qini,random_df)
 result_qini[,2] <- as.numeric(result_qini[,2])
 result_qini[,1] <- as.numeric(result_qini[,1])
-# result_qini[,4] <- as.character(result_qini[,4])
 print(difftime(Sys.time(),start_time,units = "mins"))
 
-#Visualize the results.
+
 visualize_qini_uplift(result_qini,type = "qini")
 visualize_qini_uplift(result_qini,type = "qini",errorbars = F,multiplot = F)
 visualize(outcome_df,n_treated = decile_treated_df,multiplot = T)
 visualize(outcome_df,multiplot = F,errorbars = F)
+

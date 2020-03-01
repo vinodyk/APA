@@ -19,7 +19,7 @@ source('ModelImplementations/VisualizationHelper.R')
 source("ModelImplementations/PredictionFunctions.R")
 
 
-n_predictions <- 20
+n_predictions <- 10
 set.seed(1234)
 #Preprocessing---- 
 if(!file.exists("Data/hu-data.csv")){
@@ -96,7 +96,7 @@ if(!file.exists("Data/hu-data.csv")){
 response <- 'checkoutAmount'
 control <- 'X0'
 
-
+n_predictions <- 15
 treatment_list <- levels(new_hu_data$multi_treat)[2:7]
 n_treatments <- length(treatment_list)
 new_hu_data$multi_treat <- NULL
@@ -122,33 +122,33 @@ for(f in 1:n_predictions){
   for(c in c("simple","max","frac")){
     print(c)
     # Single Tree
-    raw_tree <- build_tree(train_val,0,100,treatment_list,response,control,test_list,criterion = c)
-    pruned_tree <- simple_prune_tree(raw_tree,val,treatment_list,test_list,response,control,criterion = c)
-    pred <- predict.dt.as.df(pruned_tree, test)
-    write.csv(pred, paste("Predictions/HU-Data/tree_",c,as.character(f),".csv",sep = ""), row.names = FALSE)
+    # raw_tree <- build_tree(train_val,0,100,treatment_list,response,control,test_list,criterion = c)
+    # pruned_tree <- simple_prune_tree(raw_tree,val,treatment_list,test_list,response,control,criterion = c)
+    # pred <- predict.dt.as.df(pruned_tree, test)
+    # write.csv(pred, paste("Predictions/HU-Data/tree_",c,as.character(f),".csv",sep = ""), row.names = FALSE)
 
     #Random Forest
-    forest <- parallel_build_random_forest(train,treatment_list,response,control,n_trees = 300,n_features = 5,
-                                           criterion = c)
-    pred <- predict_forest_df(forest,test)
-    write.csv(pred, paste("Predictions/HU-Data/random_forest_",c,as.character(f),".csv",sep = ""), row.names = FALSE)
+    forest <- parallel_build_random_forest(train,treatment_list,response,control,n_trees = 200,n_features = 5,
+                                           criterion = c, min_split=100,remain_cores = 10)
+    pred <- predict_forest_df(forest,test,remain_cores = 10)
+    write.csv(pred, paste("Predictions/HU-Data/random_forest2_",c,as.character(f),".csv",sep = ""), row.names = FALSE)
   }
 
   # Causal Forest
-  causal_forest_pred <- causalForestPredicitons(train, test, treatment_list, response, control)
-  write.csv(causal_forest_pred, paste("Predictions/HU-Data/causal_forest",as.character(f),".csv",sep = ""),
-            row.names = FALSE)
-  
-  #Separate Model Approach
-  pred <- dt_models(train, response, "anova",treatment_list,control,test,"rf")
-  write.csv(pred, paste("Predictions/HU-Data/sma rf",as.character(f),".csv",sep = ""),
-            row.names = FALSE)
-  
-  # CTS
-  cts_forest <- build_cts(response, control, treatment_list, train, 300, nrow(train), 5, 1, 100, parallel = TRUE,
-                          remain_cores = 1)
-  pred <- predict_forest_df(cts_forest, test)
-  write.csv(pred, paste("Predictions/HU-Data/cts",as.character(f),".csv",sep = ""), row.names = FALSE)
+  # causal_forest_pred <- causalForestPredicitons(train, test, treatment_list, response, control)
+  # write.csv(causal_forest_pred, paste("Predictions/HU-Data/causal_forest",as.character(f),".csv",sep = ""),
+  #           row.names = FALSE)
+  # 
+  # #Separate Model Approach
+  # pred <- dt_models(train, response, "anova",treatment_list,control,test,"rf")
+  # write.csv(pred, paste("Predictions/HU-Data/sma rf",as.character(f),".csv",sep = ""),
+  #           row.names = FALSE)
+  # 
+  # # CTS
+  # cts_forest <- build_cts(response, control, treatment_list, train, 300, nrow(train), 5, 1, 100, parallel = TRUE,
+  #                         remain_cores = 1)
+  # pred <- predict_forest_df(cts_forest, test)
+  # write.csv(pred, paste("Predictions/HU-Data/cts",as.character(f),".csv",sep = ""), row.names = FALSE)
   end_time <- Sys.time()
   print(difftime(end_time,start_time,units = "mins"))
 }
@@ -158,23 +158,24 @@ for(f in 1:n_predictions){
 start_time <- Sys.time()
 folder <- "Predictions/HU-Data/"
 outcomes <- c()
-p_treated <- c()
-
-for(model in c("tree","random_forest","cts","sma rf","causal_forest")){
-  if(sum(model == c("tree","random_forest")) > 0){
+decile_treated <- c()
+n_predictions <- 5
+for(model in c("random_forest2","cts","sma rf","causal_forest")){
+  if(sum(model == c("tree","random_forest","random_forest2")) > 0){
     for(c in c("simple","max","frac")){
       for(f in 1:n_predictions){
         pred <- read.csv(paste(folder,model,"_",c,as.character(f),".csv",sep = ""))
         if(length(outcomes) == 0){
           outcomes <- c(new_expected_quantile_response(response,control,treatment_list,pred),
                         paste(model,"_",c,sep = ""))
-          p_treated <- cbind(perc_treated(pred,treatment_list),treatment_list,rep(paste(model,"_",c,sep = ""),
-                                                                                  length(treatment_list)))
+          decile_treated <- cbind(decile_perc_treated(pred,treatment_list),
+                                  rep(paste(model,"_",c,sep = ""),11*length(treatment_list)))
         } else{
           outcomes <- rbind(outcomes,c(new_expected_quantile_response(response,control,treatment_list,pred),
                                        paste(model,"_",c,sep = "")))
-          p_treated <- rbind(p_treated,cbind(perc_treated(pred,treatment_list),treatment_list,
-                                             rep(paste(model,"_",c,sep = ""),length(treatment_list))))
+          decile_treated <- rbind(decile_treated,
+                                  cbind(decile_perc_treated(pred,treatment_list),
+                                        rep(paste(model,"_",c,sep = ""),11*length(treatment_list),11)))
         }
       }
     }
@@ -182,23 +183,24 @@ for(model in c("tree","random_forest","cts","sma rf","causal_forest")){
     for(f in 1:n_predictions){
       pred <- read.csv(paste(folder,model,as.character(f),".csv",sep = ""))
       outcomes <- rbind(outcomes,c(new_expected_quantile_response(response,control,treatment_list,pred),model))
-      p_treated <- rbind(p_treated, cbind(perc_treated(pred,treatment_list),treatment_list,
-                                          rep(model, length(treatment_list))))
+      decile_treated <- rbind(decile_treated,
+                              cbind(decile_perc_treated(pred,treatment_list),
+                                    rep(model,11*length(treatment_list))))
     }
   }
 }
 outcome_df <- data.frame(outcomes)
-perc_treated_df <- data.frame(p_treated)
+decile_treated_df <- data.frame(decile_treated)
 colnames(outcome_df) <- c(0,10,20,30,40,50,60,70,80,90,100,"Model")
-colnames(perc_treated_df) <- c("PercTreated","Model")
+colnames(decile_treated_df) <- c("PercTreated","Treatment","Decile","Model")
 rownames(outcome_df) <- 1:nrow(outcome_df)
-rownames(perc_treated_df) <- 1:nrow(perc_treated_df)
+rownames(decile_treated_df) <- 1:nrow(decile_treated_df)
 for(c in 1:11){
   outcome_df[,c] <- as.numeric(as.character(outcome_df[,c]))
 }
 outcome_df[,12] <- as.character(outcome_df[,12])
-perc_treated_df[,1] <- as.numeric(as.character(perc_treated_df[,1]))
-perc_treated_df[,2] <- as.character(perc_treated_df[,2])
+decile_treated_df[,1] <- as.numeric(as.character(decile_treated_df[,1]))
+decile_treated_df[,3] <- as.numeric(as.character(decile_treated_df[,3]))
 print(difftime(Sys.time(),start_time,units = "mins"))
 
 
@@ -208,7 +210,7 @@ if(n_predictions > 1){
     n_treated <- perc_treated_df[perc_treated_df$Model == model,]
     visualize(temp_data = temp_data, multiple_predictions = TRUE, n_treated = n_treated)
   }
-  visualize(temp_data = outcome_df, multiple_predictions = TRUE, n_treated = perc_treated_df)
+  visualize(temp_data = outcome_df, multiple_predictions = TRUE, n_treated = decile_treated_df,errorbars = FALSE)
 } else{
   for(model in unique(outcome_df$Model)){
     temp_data <- outcome_df[outcome_df$Model == model,]
