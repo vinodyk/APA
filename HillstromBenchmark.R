@@ -24,7 +24,7 @@ source("ModelImplementations/PredictionFunctions.R")
 
 
 set.seed(1234)
-remain_cores <- 1
+remain_cores <- 20
 #Data import and preprocessing
 email <- read.csv('Data/Email.csv')
 
@@ -43,7 +43,7 @@ response <- 'spend'
 control <- "control"
 treatments <- c('men_treatment','women_treatment')
 temp_features <- c("","temp_feature1","temp_feature2")
-size_vector <- c(50000,100000,200000)
+size_vector <- c(10000,50000,100000)
 treatment_list <- c()
 original_email <- email
 keep_cols <- c("recency","history_segment","history","mens","womens","zip_code",
@@ -54,44 +54,64 @@ dom_time <- c()
 cts_time <- c()
 sma_time <- c()
 causal_time <- c()
+name_list <- c()
 
 for(treatment in treatments){
+  treatment_list <- c(treatment_list,treatment)
   keep_cols <- c(keep_cols,treatment)
   for(f in temp_features){
     if(f != ""){
       remain_cols <- c(keep_cols,f)
       new_feature_cols <- c(feature_cols,f)
     } else{
+      remain_cols <- keep_cols
       new_feature_cols <- feature_cols
     }
     for(size in size_vector){
+      name_list <- c(name_list,paste(treatment,f, as.character(size),sep = "_"))
       email <- original_email[,remain_cols]
       new_email <- sample_n(email,size = size,replace = T)
       train <- new_email
-      test <- new_email[1,]
-      est_list <- set_up_tests(train[,new_feature_cols],TRUE, max_cases = 10)
+      test <- new_email[1:10,]
+      test_list <- set_up_tests(train[,new_feature_cols],TRUE, max_cases = 10)
       #DOM
+      print("DOM")
       start_time <- Sys.time()
       forest <- parallel_build_random_forest(train,treatment_list,response,control,n_trees = 500,n_features = 3,
                                              criterion = "frac", remain_cores = remain_cores)
       dom_time <- c(dom_time,difftime(Sys.time(), start_time, units='mins'))
       #CTS
+      print("CTS")
       start_time <- Sys.time()
       cts_forest <- build_cts(response, control, treatment_list, train, 500, nrow(train), 5, 2, 100, parallel = TRUE,
                               remain_cores = remain_cores)
       cts_time <- c(cts_time,difftime(Sys.time(), start_time, units='mins'))
       #SMA
+      print("SMA")
       start_time <- Sys.time()
       pred_sma_rf <- dt_models(train, response, "anova",treatment_list,control,test,"rf", mtry = 3, ntree = 300)
       sma_time <- c(sma_time,difftime(Sys.time(), start_time, units='mins'))
       #Causal Forest
+      print("CF")
       start_time <- Sys.time()
-      causal_forest_pred <- causalForestPredicitons(train, test, treatment_list, response, control,ntree = 1000,
+      causal_forest_pred <- causalForestPredicitons(train, test, treatment_list, response, control,ntree = 10,
                                                     s_rule = "TOT", s_true = T)
       causal_time <- c(causal_time,difftime(Sys.time(), start_time, units='mins'))
     }
   }
 }
 
+extra_feature <- c("None","None","None","Continuous","Continuous","Continuous","Binary","Binary","Binary","None","None","None","Continuous","Continuous",
+                   "Continuous","Binary","Binary","Binary")
+treatment_vec <- c(rep("1",9),rep("2",9))
+size_vec <- rep(size_vector,6)
+causal_df <- data.frame(causal_time,"Causal Forest", treatment_vec,extra_feature,size_vec)
+cts_df <- data.frame(cts_time,"CTS", treatment_vec,extra_feature,size_vec)
+dom_df <- data.frame(dom_time,"DOM", treatment_vec,extra_feature,size_vec)
+sma_df <- data.frame(sma_time,"SMA", treatment_vec,extra_feature,size_vec)
 
+colnames(causal_df) <- colnames(cts_df) <- colnames(dom_df) <- colnames(sma_df) <- c("Time", "Model", "Number of Treatments", "Additional Feature", "Sample Size")
+
+time_df <- rbind(causal_df,cts_df,dom_df,sma_df)
+write.csv(time_df,"Time.csv")
 
