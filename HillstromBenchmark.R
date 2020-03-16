@@ -115,3 +115,14 @@ colnames(causal_df) <- colnames(cts_df) <- colnames(dom_df) <- colnames(sma_df) 
 time_df <- rbind(causal_df,cts_df,dom_df,sma_df)
 write.csv(time_df,"Time.csv")
 
+time_df <- read.csv("Time.csv")
+
+one_treatment <- time_df[time_df$Number.of.Treatments == 1,]
+print(ggplot(one_treatment, aes(y=Time, x=Additional.Feature,fill=Model)) + 
+        geom_bar(stat="identity", position=position_dodge()) +
+        facet_wrap(~Sample.Size)) 
+
+two_treatments <- time_df[time_df$Number.of.Treatments == 2,]
+print(ggplot(two_treatments, aes(y=Time, x=Additional.Feature,fill=Model)) + 
+        geom_bar(stat="identity", position=position_dodge()) +
+        facet_wrap(~Sample.Size)) 
