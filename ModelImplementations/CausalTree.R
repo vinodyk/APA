@@ -40,8 +40,25 @@ causalTreePredicitons <- function(train, test,treatment_list, response,control){
 
 causalForestPredicitons <- function(train,test,treatment_list,response,control,ntree = 200,s_true = T,s_rule = "CT"){
   pred <- data.frame(rep(0,nrow(test)))
-  for(t in treatment_list){
-    train_data <- train[train[,setdiff(treatment_list,t)] == 0,]
+  if(length(treatment_list) > 1){
+    for(t in treatment_list){
+      train_data <- train[train[,setdiff(treatment_list,t)] == 0,]
+      train_data_new <- train_data[,setdiff(colnames(train_data),c(control,treatment_list))]
+      
+      test_data <- test[,setdiff(colnames(train_data),response)]
+      
+      forest <- causalForest(as.formula(paste(response,paste(setdiff(colnames(train_data_new),response),collapse = "+"),
+                                              sep = "~")), data = train_data_new, treatment = train_data[,t], 
+                             split.Rule = s_rule, cv.option = s_rule, split.Honest = s_true, cv.Honest = T, split.Bucket = F, 
+                             minsize = 20, mtry = 3, num.trees = ntree, ncov_sample = 3, 
+                             ncolx = ncol(train_data_new)-1,sample.size.total = nrow(train_data_new),sample.size.train.frac=0.25)
+      
+      assign(paste('predictions',t,sep = '_'), predict(forest, newdata = test_data))
+      pred <- cbind(pred,eval(as.name(paste('predictions',t,sep = '_'))))
+    }
+  } else{
+    t <- treatment_list[1]
+    train_data <- train
     train_data_new <- train_data[,setdiff(colnames(train_data),c(control,treatment_list))]
     
     test_data <- test[,setdiff(colnames(train_data),response)]
@@ -55,6 +72,7 @@ causalForestPredicitons <- function(train,test,treatment_list,response,control,n
     assign(paste('predictions',t,sep = '_'), predict(forest, newdata = test_data))
     pred <- cbind(pred,eval(as.name(paste('predictions',t,sep = '_'))))
   }
+  
   colnames(pred) <- c(control,treatment_list)
   for (t in treatment_list) {
     pred[,paste("uplift",t,sep = "_")] <- pred[t] - pred[control]

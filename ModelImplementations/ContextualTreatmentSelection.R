@@ -12,7 +12,7 @@ source("ModelImplementations/DecisionTreeImplementation.R")
 # If parallel = TRUE the process will be parallalized using the number of cores available - remain_cores.
 # For further information about the algorithm please read the paper.
 build_cts <- function(response, control, treatments, data, ntree, B, m_try, n_reg, min_split, parallel = TRUE,
-                      remain_cores = 1){
+                      remain_cores = 1,min_gain=0){
   if(parallel){
     #Set up the parallelization
     numCores <- detectCores()
@@ -33,7 +33,7 @@ build_cts <- function(response, control, treatments, data, ntree, B, m_try, n_re
       temp_train_data <- na.omit(temp_train_data)
       # Once the new training data is sampled the tree is build.
       return(build_cts_tree(response, control, treatments, temp_train_data, m_try, n_reg, 
-                                  min_split, parent_predictions = NA))
+                                  min_split, parent_predictions = NA,min_gain = min_gain))
     }
     stopCluster(cl)
     return(trees)
